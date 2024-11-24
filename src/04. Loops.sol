@@ -28,3 +28,37 @@ contract Loops {
         } while (i < 10);
     }
 }
+
+contract LoopsOptimized {
+    function loopFor() public pure {
+        uint256 sum;
+        for (uint256 i = 0; i < 20; ++i) {
+            unchecked {
+                sum = sum + i;
+            }
+        }
+    }
+
+    function loopWhile() public pure {
+        uint256 sum;
+        uint256 i;
+        while (i < 10) {
+            unchecked {
+                sum = sum + i;
+                ++i;
+            }
+        }
+    }
+
+    function loopDoWhile() public pure {
+        uint256 sum;
+        uint256 i;
+
+        do {
+            unchecked {
+                sum = sum + i;
+                ++i;
+            }
+        } while (i < 10);
+    }
+}

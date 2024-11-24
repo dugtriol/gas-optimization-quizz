@@ -10,3 +10,16 @@ contract ArrayLength {
         }
     }
 }
+
+contract ArrayLengthOptimized {
+    uint256[] myArray = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+    function callFor() public view {
+        uint256 length = myArray.length;
+        for (uint256 i; i < length; ++i) {
+            unchecked {
+                ++i;
+            }
+        }
+    }
+}

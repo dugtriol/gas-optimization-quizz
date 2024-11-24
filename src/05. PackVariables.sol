@@ -9,14 +9,48 @@ contract PackVariables {
     bytes14 five;
     uint8 six;
 
-    function setValues(uint8 _one, uint256 _two, bytes18 _three, uint8[30] calldata _four, bytes14 _five, uint8 _six)
-        public
-    {
+    function setValues(
+        uint8 _one,
+        uint256 _two,
+        bytes18 _three,
+        uint8[30] calldata _four,
+        bytes14 _five,
+        uint8 _six
+    ) public {
         one = _one;
         two = _two;
         three = _three;
         four = _four;
         five = _five;
         six = _six;
+    }
+}
+
+contract PackVariablesOptimized {
+    uint8 one;
+    uint8 six;
+    bytes14 five;
+    bytes18 three;
+    uint256 two;
+    uint8[30] four;
+
+    function setValues(
+        uint8 _one,
+        uint256 _two,
+        bytes18 _three,
+        uint8[30] calldata _four,
+        bytes14 _five,
+        uint8 _six
+    ) public {
+        one = _one;
+        two = _two;
+        three = _three;
+        // four = _four;
+        five = _five;
+        six = _six;
+
+        for (uint256 i = 0; i < _four.length; ++i) {
+            four[i] = _four[i];
+        }
     }
 }

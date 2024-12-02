@@ -166,9 +166,9 @@ contract MultiSigWallet {
 }
 
 contract MultiSigWalletOptimized {
-    // address[] public owners;
-    mapping(uint256 => mapping(address => bool)) public owners;
-    uint256 public required;
+    mapping(uint256 => address) public owners;
+    uint256 private ownersCount;
+    uint256 public immutable required;
 
     struct Transaction {
         uint256 transactionID;
@@ -179,14 +179,9 @@ contract MultiSigWalletOptimized {
         bool executed;
     }
 
-    Transaction[] public transactions;
+    mapping(uint256 => Transaction) public transactions;
+    uint256 private transactionsCount;
     mapping(uint256 => mapping(address => bool)) public confirmations;
-
-    event Deposit(address indexed sender, uint256 value);
-    event Submission(uint256 indexed transactionId);
-    event Confirmation(address indexed owner, uint256 indexed transactionId);
-    event Execution(uint256 indexed transactionId);
-    event ExecutionFailure(uint256 indexed transactionId);
 
     modifier onlyOwner() {
         if (!isOwner(msg.sender)) {
@@ -195,141 +190,85 @@ contract MultiSigWalletOptimized {
         _;
     }
 
-    modifier transactionExists(uint256 transactionId) {
-        if (transactionId >= transactions.length) {
-            revert("Transaction does not exist");
-        }
-        _;
-    }
-
-    modifier notConfirmed(uint256 transactionId) {
-        if (confirmations[transactionId][msg.sender]) {
-            revert("Transaction already confirmed");
-        }
-        _;
-    }
-
-    modifier notExecuted(uint256 transactionId) {
-        require(
-            !transactions[transactionId].executed,
-            "Transaction already executed"
-        );
-        _;
-    }
-
     constructor(address[] memory _owners, uint256 _required) payable {
-        if (_owners.length <= 0) {
-            revert("Owners required");
-        }
-
-        if (_required > _owners.length && _required <= 0) {
-            revert("Invalid number of required confirmations");
-        }
-
+        ownersCount = _owners.length;
         for (uint256 i = 0; i < _owners.length; ++i) {
-            if (_owners[i] == address(0)) {
-                revert("Invalid owner");
-            }
-
-            owners[i][_owners[i]] = true;
+            owners[i] = _owners[i];
         }
-
+        transactionsCount = 0;
         required = _required;
     }
 
-    receive() external payable {
-        emit Deposit(msg.sender, msg.value);
-    }
+    receive() external payable {}
 
     function submitTransaction(
         address destination,
         uint256 value
-    ) public onlyOwner {
-        transactions.push(
-            Transaction({
-                transactionID: transactions.length,
-                destination: destination,
-                value: value,
-                confirmationCount: 0,
-                executionTimestamp: 0,
-                executed: false
-            })
-        );
-
-        emit Submission(transactions.length);
+    ) external payable onlyOwner {
+        transactions[transactionsCount] = Transaction({
+            transactionID: transactionsCount,
+            destination: destination,
+            value: value,
+            confirmationCount: 0,
+            executionTimestamp: 0,
+            executed: false
+        });
+        transactionsCount += 1;
     }
 
     function confirmTransaction(
         uint256 transactionId
-    )
-        public
-        onlyOwner
-        transactionExists(transactionId)
-        notConfirmed(transactionId)
-    {
+    ) external payable onlyOwner {
         confirmations[transactionId][msg.sender] = true;
         transactions[transactionId].confirmationCount += 1;
-
-        emit Confirmation(msg.sender, transactionId);
-
-        if (transactions[transactionId].confirmationCount >= required) {
-            executeTransaction(transactionId);
-        }
+        executeTransaction(transactionId);
     }
 
     function executeTransaction(
         uint256 transactionId
-    )
-        public
-        onlyOwner
-        transactionExists(transactionId)
-        notExecuted(transactionId)
-    {
-        if (transactions[transactionId].confirmationCount >= required) {
-            transactions[transactionId].executed = true;
+    ) public payable onlyOwner {
+        transactions[transactionId].executed = true;
 
-            (bool success, ) = transactions[transactionId].destination.call{
-                value: transactions[transactionId].value
-            }("");
-            if (success) {
-                emit Execution(transactionId);
-            } else {
-                transactions[transactionId].executed = false;
-                emit ExecutionFailure(transactionId);
-            }
+        (bool success, ) = transactions[transactionId].destination.call{
+            value: transactions[transactionId].value
+        }("");
+        if (!success) {
+            transactions[transactionId].executed = false;
         }
     }
 
     function isOwner(address account) public view returns (bool) {
-        // for (uint256 i = 0; i < owners.length; i++) {
-        //     if (owners[i] == account) {
-        //         return true;
-        //     }
-        // }
-        // return false;
-        return owners[account];
+        for (uint256 i = 0; i < ownersCount; ++i) {
+            unchecked {
+                if (owners[i] == account) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
-    function getTransactionCount() public view returns (uint256) {
-        return transactions.length;
+    function getTransactionCount() external view returns (uint256) {
+        return transactionsCount;
     }
 
     function getConfirmations(
         uint256 transactionId
-    ) public view returns (address[] memory) {
-        address[] memory _confirmations = new address[](owners.length);
-        uint256 count = 0;
+    ) external view returns (address[] memory) {
+        uint256 confirmationCount = transactions[transactionId]
+            .confirmationCount;
 
-        for (uint256 i = 0; i < owners.length; i++) {
+        address[] memory confirmationsTrimmed = new address[](
+            confirmationCount
+        );
+
+        uint256 index = 0;
+        for (uint256 i = 0; i < ownersCount; ++i) {
             if (confirmations[transactionId][owners[i]]) {
-                _confirmations[count] = owners[i];
-                count += 1;
+                confirmationsTrimmed[index] = owners[i];
+                index += 1;
             }
-        }
-
-        address[] memory confirmationsTrimmed = new address[](count);
-        for (uint256 i = 0; i < count; i++) {
-            confirmationsTrimmed[i] = _confirmations[i];
+            if (index == confirmationCount) break;
         }
 
         return confirmationsTrimmed;
